@@ -68,4 +68,4 @@ install.packages("ggplot2")
 install.packages("readxl")
 ```
 ### Grafik Prediksi
-![Perbandingan Prediksi Kedua Model](Forecasting ARIMA HW.png)
+![Perbandingan Prediksi Kedua Model](<Forecasting ARIMA HW.png>)
