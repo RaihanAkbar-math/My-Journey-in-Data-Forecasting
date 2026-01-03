@@ -10,6 +10,8 @@ Nilai ekspor Indonesia mengalami fluktuasi yang signifikan dalam beberapa tahun 
 
 Berdasarkan evaluasi menggunakan **Mean Absolute Percentage Error (MAPE)**, penelitian ini menemukan bahwa model **Holt-Winters Additive** memberikan kinerja yang lebih baik dibandingkan ARIMA untuk data ekspor periode ini.
 
+Penelitian ini juga telah dipublikasikan pada Jurnal MILANG IPB berikut: ![Publikasi](<https://doi.org/10.29244/milang.21.2.145-162>)
+
 ## 👥 Penulis
 
 * **R. Akbar** - *IPB University*
