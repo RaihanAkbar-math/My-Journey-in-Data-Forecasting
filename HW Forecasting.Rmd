@@ -1,0 +1,329 @@
+---
+title: "HW ekspor"
+author: "Raihan Akbar"
+date: "2024-11-17"
+output: html_document
+---
+
+```{r}
+## Package-package yang dipakai
+
+library (openxlsx)
+library (magrittr)
+library (tidyr)
+library (forecast)
+```
+
+```{r}
+#Import data ekspor 2013-2023
+export = read.xlsx("C:/Kuliah IPB/Skripsi/Coding/Data Fix Ekspor.xlsx")
+
+#Mengecek class export data
+class(export)
+
+
+#Transformasi Data
+export = transform(export, export_date = as.Date(export$Month, origin = "1899-12-30"))
+export = export%>%separate(export_date, sep="-", into = c("Year","Month","Day") )
+head(export)
+```
+
+```{r}
+#Plot Timeseries
+export_ts = ts(export$Nilai_Ekspor, frequency = 12, start=c(2013,1), end = c(2023,12))
+plot.ts(export_ts)
+```
+
+```{r}
+#Decompose Data Musiman
+export_components = decompose(export_ts)
+plot(export_components)
+
+#Penyesuaian musiman data timeseries
+export_adjseasonal = export_ts - export_components$seasonal
+plot(export_adjseasonal)
+```
+
+
+```{r}
+##HW Forecasting (90:10)
+
+export_forecast_add_2 = HoltWinters(train3, seasonal = "additive")
+export_forecast_add_2
+
+export_forecast_mul_2 = HoltWinters(train3, seasonal = "multiplicative")
+export_forecast_mul_2
+
+#Sum of Squared Error (SSE)
+export_forecast_add_2$SSE
+export_forecast_mul_2$SSE
+
+#Plot forecast data train HW
+plot(export_forecast_add_2, main = "Holt-Winters Additive")
+plot(export_forecast_mul_2)
+
+export_forecast_add2 = 
+  forecast:::forecast.HoltWinters(export_forecast_add_2,h = 13, seasonal = "additive")
+forecast:::plot.forecast(export_forecast_add2)
+
+export_forecast_mul2 = 
+  forecast:::forecast.HoltWinters(export_forecast_mul_2,h = 13, seasonal = "multiplicative")
+forecast:::plot.forecast(export_forecast_mul2)
+
+#Tabel data forecast
+export_forecast_add2
+export_forecast_mul2
+
+# Hitung akurasi untuk masing-masing model 
+accuracy(export_forecast_add2, test3)
+accuracy(export_forecast_mul2, test3)
+
+export_forecast_add2$residuals
+```
+
+```{r}
+l.start = 15212.66
+b.start = -45.638
+s.start = c(1.010704353, 0.987046424, 0.987638036, 0.970303788, 1.060524706, 0.970165745, 0.991799045, 0.860053497, 0.966747539, 1.031923524, 1.04771958, 1.115373765
+)  # 12 nilai musiman
+```
+
+
+```{r}
+# Grid search untuk parameter alpha, beta, gamma
+best_modeladd <- NULL
+best_rmseadd <- Inf
+best_paramsadd <- list()
+
+# Loop untuk semua kombinasi alpha, beta, gamma
+for (alphaadd in seq(0.1, 1, by = 0.1)) {
+  for (betaadd in seq(0.1, 1, by = 0.1)) {
+    for (gammaadd in seq(0.1, 1, by = 0.1)) {
+      # Coba model Holt-Winters Additive dengan parameter manual
+      modeladd <- tryCatch({
+        HoltWinters(train3, alpha = alphaadd, beta = betaadd, gamma = gammaadd, seasonal = "additive")
+      }, error = function(e) NULL)
+      
+      # Lanjutkan hanya jika model berhasil dibuat
+      if (!is.null(modeladd)) {
+        # Forecast pada data uji
+        predadd <- forecast(modeladd, h = length(test3))
+        
+        # Hitung RMSE
+        rmseadd <- sqrt(mean((test3 - predadd$mean)^2))
+        
+        # Simpan model terbaik
+        if (rmseadd < best_rmseadd) {
+          best_rmseadd <- rmseadd
+          best_modeladd <- modeladd
+          best_paramsadd <- list(alpha = alphaadd, beta = betaadd, gamma = gammaadd)
+        }
+      }
+    }
+  }
+}
+
+# Output hasil terbaik
+cat("Best Parameters:\n")
+print(best_paramsadd)
+cat("Best RMSE:\n")
+print(best_rmseadd)
+
+
+#Holt-Winters Add
+hwadd = HoltWinters(train3, alpha=NULL, beta = NULL, gamma = NULL, seasonal="additive", l.start = 15212.66, b.start = -45.638, s.start = )
+hwadd
+```
+
+```{r}
+# Parameter terbaik dari cross-validation
+best_alphaadd <- 0.9  # Misalnya hasil terbaik
+best_betaadd <- 0.2
+best_gammaadd <- 0.5
+
+# Bangun model Holt-Winters Additive dengan parameter terbaik
+modeladd <- HoltWinters(train3, alpha = best_alphaadd, beta = best_betaadd, gamma = best_gammaadd, seasonal = "additive")
+modeladd
+
+# Plot model terbaik dengan prediksi
+forecastedadd <- forecast(best_modeladd, h = length(test3))
+plot(forecastedadd, main = "Holt-Winters Additive")
+
+# Tampilkan hasil prediksi
+print(forecastedadd)
+
+#Akurasi HW Additive
+accuracy(forecastedadd,test3)
+```
+
+```{r}
+# Grid search untuk parameter alpha, beta, gamma
+best_modelmul <- NULL
+best_rmsemul <- Inf
+best_paramsmul <- list()
+
+# Loop untuk semua kombinasi alpha, beta, gamma
+for (alphamul in seq(0.1, 1, by = 0.1)) {
+  for (betamul in seq(0.1, 1, by = 0.1)) {
+    for (gammamul in seq(0.1, 1, by = 0.1)) {
+      # Coba model Holt-Winters Additive dengan parameter manual
+      modelmul <- tryCatch({
+        HoltWinters(train3, alpha = alphamul, beta = betamul, gamma = gammamul, seasonal = "multiplicative")
+      }, error = function(e) NULL)
+      
+      # Lanjutkan hanya jika model berhasil dibuat
+      if (!is.null(modelmul)) {
+        # Forecast pada data uji
+        predmul <- forecast(modelmul, h = length(test3))
+        
+        # Hitung RMSE
+        rmsemul <- sqrt(mean((test3 - predmul$mean)^2))
+        
+        # Simpan model terbaik
+        if (rmsemul < best_rmsemul) {
+          best_rmsemul <- rmsemul
+          best_modelmul <- modelmul
+          best_paramsmul <- list(alpha = alphamul, beta = betamul, gamma = gammamul)
+        }
+      }
+    }
+  }
+}
+
+# Output hasil terbaik
+cat("Best Parameters:\n")
+print(best_paramsmul)
+cat("Best RMSE:\n")
+print(best_rmsemul)
+```
+
+```{r}
+hwadd <- HoltWinters(
+  x = train3,
+  alpha = 0.9,    # Nilai alpha yang ingin diuji
+  beta = 0.2,     # Nilai beta yang ingin diuji
+  gamma = 0.5,    # Nilai gamma yang ingin diuji
+  seasonal = "additive",
+  start.periods = 12,
+  l.start = 15212.66,
+  b.start = -45.638,
+  s.start = c(162.842, -197.058, -188.058, -451.758, 920.742, -453.858, -124.758, -2128.958, -505.858, 485.642, 725.942, 1755.142))
+
+hwadd
+
+hwadd2 = 
+  forecast:::forecast.HoltWinters(hwadd,h = 13, seasonal = "additive")
+forecast:::plot.forecast(hwadd2)
+
+hwadd2
+
+# Plot model terbaik dengan prediksi
+hwfadd <- forecast(hwadd, h = length(test3))
+plot(hwfadd, main = "Holt-Winters Additive")
+
+# Tampilkan hasil prediksi
+print(hwfadd)
+
+#Akurasi HW Additive
+accuracy(hwfadd,test3)
+
+```
+
+
+```{r}
+# Parameter terbaik dari cross-validation
+best_alphamul <- 0.8  # Misalnya hasil terbaik
+best_betamul <- 0.2
+best_gammamul <- 0.4
+
+
+# Bangun model Holt-Winters Additive dengan parameter terbaik
+modelmul <- HoltWinters(train3, alpha = best_alphamul, beta = best_betamul, gamma = best_gammamul, seasonal = "multiplicative")
+modelmul
+
+# Plot model terbaik dengan prediksi
+forecastedmul <- forecast(best_modelmul, h = length(test3))
+plot(forecastedmul, main = "Holt-Winters Multiplicative")
+
+# Tampilkan hasil prediksi
+print(forecastedmul)
+
+#Akurasi HW Additive
+accuracy(forecastedmul,test3)
+```
+
+```{r}
+hwmul <- HoltWinters(
+  x = train3,
+  alpha = 0.8,    # Nilai alpha yang ingin diuji
+  beta = 0.2,     # Nilai beta yang ingin diuji
+  gamma = 0.4,    # Nilai gamma yang ingin diuji
+  seasonal = "multiplicative",
+  start.periods = 12,
+  l.start = 15212.66,
+  b.start = -45.638,
+  s.start = c(1.011, 0.987, 0.988, 0.970, 1.061, 0.970, 0.992, 0.860, 0.967, 1.032, 1.048, 1.115
+))
+
+hwmul
+
+hwmul2 = 
+  forecast:::forecast.HoltWinters(hwmul,h = 13, seasonal = "multiplicative")
+forecast:::plot.forecast(hwmul2)
+
+hwmul2
+
+# Plot model terbaik dengan prediksi
+hwfmul <- forecast(hwmul, h = length(test3))
+plot(hwfmul, main = "Holt-Winters Multiplicative")
+
+# Tampilkan hasil prediksi
+print(hwfmul)
+
+#Akurasi HW Additive
+accuracy(hwfmul,test3)
+
+```
+
+
+```{r}
+# Membuat grafik hasil peramalan
+autoplot(hwfadd)
+library(ggplot2)
+p = ggplot()
+p = p + geom_line(aes(x=1:119, y = train3, color = "Data Training"))
+p = p + geom_line(aes(x=120:132, y = test3, color = "Data Testing"))
+p = p + geom_line(aes(x=120:132, y = hwfadd$mean, color = "Prediksi HW Additive"))
+p = p + ylab("Nilai Ekspor Indonesia")
+p = p + xlab("Bulan")
+p = p + ggtitle("Holt-Winters Additive Forecast")
+p = p + geom_ribbon(aes(x=c(120:132), y = hwfadd$mean, ymin = hwfadd$lower[, "95%"], ymax = hwfadd$upper[, "95%"]), linetype=2, alpha=0.1)
+p
+```
+
+
+```{r}
+# Membuat grafik hasil peramalan
+autoplot(hwfmul)
+library(ggplot2)
+p = ggplot()
+p = p + geom_line(aes(x=1:119, y = train3, color = "Data Training"))
+p = p + geom_line(aes(x=120:132, y = test3, color = "Data Testing"))
+p = p + geom_line(aes(x=120:132, y = hwfmul$mean, color = "Prediksi HW Multiplicative"))
+p = p + ylab("Nilai Ekspor Indonesia")
+p = p + xlab("Bulan")
+p = p + ggtitle("Holt-Winters Multiplicative Forecast")
+p = p + geom_ribbon(aes(x=c(120:132), y = hwfmul$mean, ymin = hwfmul$lower[, "95%"], ymax = hwfmul$upper[, "95%"]), linetype=2, alpha=0.1)
+p
+```
+
+
+```{r}
+#Prediksi untuk 1 tahun ke depan (tahun 2024)
+forecast2024hwadd = forecast(hwadd, h=length(test3)+12)
+forecast2024hwadd
+
+forecast2024hwmul = forecast(hwmul, h=length(test3)+12)
+forecast2024hwmul
+```
+

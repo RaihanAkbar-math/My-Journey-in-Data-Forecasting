@@ -1,0 +1,303 @@
+```{r}
+#library yang digunakan
+library(openxlsx)
+library (magrittr)
+library (tidyr)
+library (e1071)
+library (moments)
+library (forecast)
+library (tseries)
+library (lmtest)
+library (knitr)
+library (MASS)
+library (ggplot2)
+library (TTR)
+library (TSA)
+library (graphics)
+library (astsa)
+library (car)
+```
+
+```{r}
+#Import data ekspor 2013-2023
+export = read.xlsx("D:/Skripsi/Coding/Data Fix Ekspor.xlsx")
+
+#Mengecek class export data
+class(export)
+
+#Transformasi Data
+export = transform(export, export_date = as.Date(export$Month, origin = "1899-12-30"))
+export = export%>%separate(export_date, sep="-", into = c("Year","Month","Day") )
+export
+
+# Uji musiman
+kruskal.test(Nilai_Ekspor ~ Month, data = export)
+#p-value = 0.8873 artinya tidak musiman
+```
+
+
+```{r}
+#Analisis statistika deskriptif dari data
+summary(export)
+
+#Ubah ke data timeseries
+export_ts = ts(export$Nilai_Ekspor, frequency = 12, start=c(2013,1), end = c(2023,12))
+plot.ts(export_ts, main = "Indonesian Export Value 2013-2023", xlab = "Month", ylab= "Export Value (Million US$)")
+
+#Nilai skewness (menjulur) dari data export
+skewness(export_ts)
+
+#Nilai kurtosis dari data export
+kurtosis (export_ts)
+
+#Plot Kepekatan Data
+plot(x=density(export_ts), main = "Skewness and Kurtosis", xlab = "Export Value", ylab = "Frequency")
+
+#Plot boxplot export
+boxplot(export_ts, main ="Indonesian Export Value Box-Plot 2013-2023")
+```
+
+
+
+```{r}
+#Splitting data timeseries (90:10)
+train3 = subset(export_ts,start=1,end=119)
+test3 = subset(export_ts,start=120,end=132)
+
+
+#Data decomposition
+export_decom<- decompose(x = export_ts)
+autoplot(export_decom)
+
+#Uji stasioneritas
+adf.test(train3)
+
+# ACF dan PACF
+par(mfrow=c(1,2))
+acf(as.numeric(train3), lag.max = 15, main = "ACF before differencing")
+pacf(as.numeric(train3), lag.max = 15, main = "PACF before differencing")
+
+#Differencing
+exportdiff = diff(train3, lag=1)
+exportdiff
+plot(exportdiff, main="Differenced Export", xlab = "Period", ylab ="Export Value (million US$)")
+
+adf.test(exportdiff)
+##p-value = 0.01 sudah stasioner
+##ACF dan PACF
+par(mfrow)
+acf(as.numeric(exportdiff), lag.max = 15, main = "ACF after differencing")
+pacf(as.numeric(exportdiff), lag.max = 15, main = "PACF after differencing")
+eacf(exportdiff)
+```
+
+```{r}
+library(dplyr)
+# Ubah time series menjadi data frame
+df_train <- data.frame(
+  Date = as.Date(time(train3)),
+  Value = as.numeric(train3),
+  Set = "Training"
+)
+
+df_test <- data.frame(
+  Date = as.Date(time(test3)),
+  Value = as.numeric(test3),
+  Set = "Testing"
+)
+
+# Gabungkan training dan testing
+df_all <- bind_rows(df_train, df_test)
+
+# Tentukan tanggal awal testing untuk garis vertikal
+test_start_date <- min(df_test$Date)
+
+# Plot dengan ggplot2
+ggplot(df_all, aes(x = Date, y = Value, color = Set)) +
+  geom_line(size = 1) +
+  geom_vline(xintercept = as.numeric(test_start_date), 
+             linetype = "dashed", 
+             color = "black", 
+             size = 1) +
+  labs(
+    title = "Indonesian Export Value 2013-2023",
+    x = "Period",
+    y = "Export Value (million US$)",
+    color = "Dataset"
+  ) +
+  scale_color_manual(values = c("Training" = "blue", "Testing" = "red")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+```{r}
+#MODEL ARMA(p,q) dan d=1 dengan p<=2, q<=2, p+q<=3
+#Pemodelan  ARIMA
+### Jika digabung maka parameternya ARIMA
+model011 = Arima(train3, order=c(0,1,1));
+model012 = Arima(train3, order=c(0,1,2));
+model013 = Arima(train3, order=c(0,1,3));
+model111 = Arima(train3, order=c(1,1,1));
+model112 = Arima(train3, order=c(1,1,2));
+model113 = Arima(train3, order=c(1,1,3));
+model212 = Arima(train3, order=c(2,1,2));
+model213 = Arima(train3, order=c(2,1,3));
+model310 = Arima(train3, order=c(3,1,0));
+model312 = Arima(train3, order=c(3,1,2));
+model313 = Arima(train3, order=c(3,1,3));
+
+AIC(model011, model012, model013, model111, model112, model113, model212, model213, model310, model312, model313);
+```
+
+```{r}
+#Tes Koefisien
+coeftest(model011)
+coeftest(model012)
+coeftest(model013)
+coeftest(model111)
+coeftest(model112)
+coeftest(model113)
+coeftest(model212)
+coeftest(model213)
+coeftest(model310)
+coeftest(model312)
+coeftest(model313)
+```
+
+```{r}
+```
+
+```{r}
+
+```
+
+```{r}
+```
+
+```{r}
+#Model ARIMA(2,1,3) dan model ARIMA(3,1,2) yang terbaik
+
+#Uji Ljung-Box (white-noise)
+Box.test(model213$residuals, type = "Ljung-Box", fitdf=5)
+Box.test(model312$residuals, type = "Ljung-Box", fitdf=5)
+
+#Model 1 tidak memenuhi asumsi p-value >0.05 maka ada korelasi
+
+#Uji Normalitas Ljung-Box
+jarque.bera.test(model213$residuals)
+jarque.bera.test(model312$residuals)
+skewness(model3$residuals)
+kurtosis(model3$residuals)
+
+# Uji Kolmogorov-Smirnov terhadap distribusi normal
+ks.test(model213$residuals, "pnorm", mean = mean(model213$residuals), sd = sd(model213$residuals))
+
+ks.test(model312$residuals, "pnorm", mean = mean(model312$residuals), sd = sd(model312$residuals))
+
+#Overfitting
+model313 = Arima(train3, order=c(3,1,3))
+coeftest(model313)
+AIC(model313)
+
+#Uji t-test model 3
+# T-Test untuk residuals: apakah mean residual = 0
+t_test_result <- t.test(model213$residuals, mu = 0)
+
+# Output hasil
+print(t_test_result)
+
+if (t_test_result$p.value < 0.05) {
+  print("Reject null hypothesis: Mean of residuals is significantly different from 0.")
+} else {
+  print("Fail to reject null hypothesis: Mean of residuals is not significantly different from 0.")
+}
+
+#Uji t-test model 2
+# T-Test untuk residuals: apakah mean residual = 0
+t_test_result2 <- t.test(model312$residuals, mu = 0)
+
+# Output hasil
+print(t_test_result2)
+
+if (t_test_result2$p.value < 0.05) {
+  print("Reject null hypothesis: Mean of residuals is significantly different from 0.")
+} else {
+  print("Fail to reject null hypothesis: Mean of residuals is not significantly different from 0.")
+}
+
+#Prediksi data testing
+forecast213 = forecast(model213, h = length(test3))
+forecast213
+
+accuracy(forecast213,test3)
+
+#Prediksi data testing
+forecast312 = forecast(model312, h = length(test3))
+forecast312$mean
+
+accuracy(forecast312,test3)
+```
+
+```{r}
+#Uji heteroskedastisitas ARCH-LM
+install.packages("FinTS")  # Untuk uji ARCH-LM
+install.packages("rugarch") # Untuk analisis GARCH/ARCH
+
+library(FinTS)
+library(rugarch)
+
+arch_test_result <- ArchTest(model213$residuals, lags = 5, demean = TRUE)
+print(arch_test_result)
+
+fitted_values <- fitted(model213)  # Ambil fitted values dari model ARIMA
+residuals_squared <- (model213$residual)^2  # Kuadratkan residual
+
+auxiliary_model <- lm(residuals_squared ~ fitted_values)
+
+bp_test_result <- bptest(auxiliary_model)
+print(bp_test_result)
+```
+
+```{r}
+arch_test_result312 <- ArchTest(model312$residuals, lags = 15, demean = TRUE)
+print(arch_test_result312)
+
+fitted_values312 <- fitted(model312)  # Ambil fitted values dari model ARIMA
+residuals_squared312 <- (model312$residual)^2  # Kuadratkan residual
+
+auxiliary_model312 <- lm(residuals_squared312 ~ fitted_values312)
+
+bp_test_result312 <- bptest(auxiliary_model312)
+print(bp_test_result312)
+```
+
+```{r}
+#Plot Data
+plot(forecast312)
+
+# Membuat grafik hasil peramalan
+autoplot(forecast312)
+library(ggplot2)
+p = ggplot()
+p = p + geom_line(aes(x=1:119, y = train3, color = "Data Training"))
+p = p + geom_line(aes(x=120:132, y = test3, color = "Data Testing"))
+p = p + geom_line(aes(x=120:132, y = forecast312$mean, color = "Prediksi ARIMA"))
+p = p + ylab("Nilai Ekspor Indonesia")
+p = p + xlab("Bulan")
+p = p + ggtitle("ARIMA(3,1,2) Forecast")
+p = p + geom_ribbon(aes(x=c(120:132), y = forecast312$mean, ymin = forecast213$lower[, "95%"], ymax = forecast312$upper[, "95%"]), linetype=2, alpha=0.1)
+p
+```
+
+```{r}
+#Prediksi untuk 1 tahun ke depan (tahun 2024)
+forecast2024arima = forecast(model213, h=length(test3)+12)
+forecast2024arima
+
+#Prediksi untuk 1 tahun ke depan (tahun 2024)
+forecast2024arima312 = forecast(model312, h=length(test3)+12)
+forecast2024arima312
+```
